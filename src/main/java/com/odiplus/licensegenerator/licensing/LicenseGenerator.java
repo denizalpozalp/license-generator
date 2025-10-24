@@ -5,6 +5,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.GeneralSecurityException;
+import java.security.KeyFactory;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.PrivateKey;
@@ -47,7 +48,11 @@ public class LicenseGenerator {
         LOGGER.info("Generating license for '{}'", request.customerName());
 
         KeyPair keyPair = generateKeyPair(request.keySize());
-        LicensePayload payload = buildPayload(request);
+        LicensePayload payload = buildPayload(
+                request.customerName(),
+                request.issuedAt(),
+                request.expiresAt(),
+                request.hardwareId());
 
         ObjectNode payloadNode = objectMapper.valueToTree(payload);
         byte[] payloadBytes = serializePayload(payloadNode);
@@ -66,6 +71,31 @@ public class LicenseGenerator {
                 signature);
     }
 
+    public LicenseGenerationResult generateWithExistingPrivateKey(ExistingPrivateKeyLicenseRequest request) {
+        LOGGER.info("Generating license with existing private key for '{}'", request.customerName());
+
+        PrivateKey privateKey = readPrivateKey(request.privateKeyPath());
+        LicensePayload payload = buildPayload(
+                request.customerName(),
+                request.issuedAt(),
+                request.expiresAt(),
+                request.hardwareId());
+
+        ObjectNode payloadNode = objectMapper.valueToTree(payload);
+        byte[] payloadBytes = serializePayload(payloadNode);
+        String signature = signPayload(payloadBytes, privateKey);
+
+        writeLicenseFile(request.licensePath(), payloadNode, signature);
+
+        LOGGER.info("License generated successfully using an existing private key.");
+        return new LicenseGenerationResult(
+                request.licensePath(),
+                null,
+                request.privateKeyPath(),
+                payload,
+                signature);
+    }
+
     private KeyPair generateKeyPair(int keySize) {
         try {
             KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA");
@@ -76,16 +106,15 @@ public class LicenseGenerator {
         }
     }
 
-    private LicensePayload buildPayload(LicenseGenerationRequest request) {
-        Instant issuedAt = request.issuedAt();
+    private LicensePayload buildPayload(String customerName, Instant issuedAt, Instant expiresAt, String hardwareId) {
         if (issuedAt == null) {
             issuedAt = Instant.now(clock);
         }
         return new LicensePayload(
-                request.customerName(),
+                customerName,
                 issuedAt,
-                request.expiresAt(),
-                request.hardwareId());
+                expiresAt,
+                hardwareId);
     }
 
     private byte[] serializePayload(JsonNode payloadNode) {
@@ -105,6 +134,23 @@ public class LicenseGenerator {
             return Base64.getEncoder().encodeToString(signed);
         } catch (GeneralSecurityException ex) {
             throw new LicenseGenerationException("Unable to sign license payload", ex);
+        }
+    }
+
+    private PrivateKey readPrivateKey(Path privateKeyPath) {
+        try {
+            String pem = Files.readString(privateKeyPath, StandardCharsets.UTF_8);
+            String sanitized = pem
+                    .replace("-----BEGIN PRIVATE KEY-----", "")
+                    .replace("-----END PRIVATE KEY-----", "")
+                    .replaceAll("\\s", "");
+            byte[] decoded = Base64.getDecoder().decode(sanitized);
+            KeyFactory keyFactory = KeyFactory.getInstance("RSA");
+            return keyFactory.generatePrivate(new java.security.spec.PKCS8EncodedKeySpec(decoded));
+        } catch (IOException ex) {
+            throw new LicenseGenerationException("Unable to read private key file", ex);
+        } catch (GeneralSecurityException ex) {
+            throw new LicenseGenerationException("Unable to parse private key", ex);
         }
     }
 

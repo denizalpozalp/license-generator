@@ -42,6 +42,14 @@ public class LicenseController {
         return LicenseGenerationResponse.fromResult(result);
     }
 
+    @PostMapping(path = "/sign")
+    @ResponseStatus(HttpStatus.CREATED)
+    public LicenseGenerationResponse generateWithExistingPrivateKey(
+            @RequestBody @Valid ExistingPrivateKeyLicenseRequestPayload payload) {
+        LicenseGenerationResult result = licenseGenerator.generateWithExistingPrivateKey(payload.toRequest());
+        return LicenseGenerationResponse.fromResult(result);
+    }
+
     @PostMapping(path = "/verify", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public LicenseVerificationResponse verify(
             @RequestPart("license") MultipartFile licenseFile,

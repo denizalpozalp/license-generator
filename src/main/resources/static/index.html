@@ -161,6 +161,39 @@
         </section>
 
         <section>
+            <h2>Mevcut Private Key ile Lisans Oluştur</h2>
+            <p class="hint">Daha önce oluşturulmuş private key dosyasını kullanarak yeni bir lisans üretin.</p>
+            <form id="existing-key-form">
+                <label>
+                    Müşteri Adı
+                    <input type="text" name="customerName" required>
+                </label>
+                <label>
+                    Lisans Başlangıç Tarihi (opsiyonel)
+                    <input type="datetime-local" name="issuedAt">
+                </label>
+                <label>
+                    Lisans Bitiş Tarihi
+                    <input type="datetime-local" name="expiresAt" required>
+                </label>
+                <label>
+                    Donanım Kimliği (opsiyonel)
+                    <input type="text" name="hardwareId">
+                </label>
+                <label>
+                    Lisans Dosya Yolu
+                    <input type="text" name="licensePath" required placeholder="/tmp/license.json">
+                </label>
+                <label>
+                    Private Key Dosya Yolu
+                    <input type="text" name="privateKeyPath" required placeholder="/tmp/private.pem">
+                </label>
+                <button type="submit">Lisans Oluştur</button>
+            </form>
+            <pre id="existing-key-result" class="result" hidden></pre>
+        </section>
+
+        <section>
             <h2>Lisans ve Public Key Doğrula</h2>
             <p class="hint">Lisans dosyasını ve iki adet public key dosyasını seçerek hangisinin imza ile eşleştiğini kontrol edin.</p>
             <form id="verify-form">
@@ -187,6 +220,8 @@
     </main>
 
     <script>
+        const toIsoOrNull = (value) => value ? new Date(value).toISOString() : null;
+
         const generateForm = document.getElementById('generate-form');
         const generateResult = document.getElementById('generate-result');
         generateForm.addEventListener('submit', async (event) => {
@@ -196,7 +231,6 @@
             const payload = Object.fromEntries(formData.entries());
             payload.keySize = payload.keySize ? Number(payload.keySize) : null;
 
-            const toIsoOrNull = (value) => value ? new Date(value).toISOString() : null;
             payload.issuedAt = toIsoOrNull(payload.issuedAt);
             payload.expiresAt = toIsoOrNull(payload.expiresAt);
             payload.hardwareId = payload.hardwareId || null;
@@ -218,6 +252,37 @@
             } catch (error) {
                 generateResult.hidden = false;
                 generateResult.textContent = `Hata: ${error.message}`;
+            }
+        });
+
+        const existingKeyForm = document.getElementById('existing-key-form');
+        const existingKeyResult = document.getElementById('existing-key-result');
+        existingKeyForm.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            const formData = new FormData(existingKeyForm);
+
+            const payload = Object.fromEntries(formData.entries());
+            payload.issuedAt = toIsoOrNull(payload.issuedAt);
+            payload.expiresAt = toIsoOrNull(payload.expiresAt);
+            payload.hardwareId = payload.hardwareId || null;
+
+            try {
+                const response = await fetch('/api/licenses/sign', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const body = await response.json();
+                if (!response.ok) {
+                    throw new Error(body.detail || 'Lisans oluşturulurken hata oluştu');
+                }
+
+                existingKeyResult.hidden = false;
+                existingKeyResult.textContent = JSON.stringify(body, null, 2);
+            } catch (error) {
+                existingKeyResult.hidden = false;
+                existingKeyResult.textContent = `Hata: ${error.message}`;
             }
         });
 

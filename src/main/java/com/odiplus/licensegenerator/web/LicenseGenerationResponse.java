@@ -14,8 +14,12 @@ public record LicenseGenerationResponse(
         return new LicenseGenerationResponse(
                 result.payload(),
                 result.signature(),
-                result.licensePath().toAbsolutePath().toString(),
-                result.publicKeyPath().toAbsolutePath().toString(),
-                result.privateKeyPath().toAbsolutePath().toString());
+                toAbsolutePathString(result.licensePath()),
+                toAbsolutePathString(result.publicKeyPath()),
+                toAbsolutePathString(result.privateKeyPath()));
+    }
+
+    private static String toAbsolutePathString(java.nio.file.Path path) {
+        return path != null ? path.toAbsolutePath().toString() : null;
     }
 }
