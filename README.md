@@ -20,6 +20,12 @@ Bu proje, RSA tabanlı imza ile lisans üretip doğrulayabilen Spring Boot taban
 5. Payload baytları, özel anahtar ile `SHA256withRSA` algoritması üzerinden imzalanır.
 6. Lisans dosyası JSON formatında `{ "payload": { ... }, "signature": "..." }` olarak kaydedilir. Public ve private key dosyaları PEM formatında üretilir.
 
+### Mevcut Private Key ile Lisans Üretimi
+
+1. Kullanıcıdan müşteri adı, geçerlilik tarihleri, opsiyonel donanım kimliği ve kullanılacak private key dosya yolu alınır.
+2. `LicenseGenerator`, belirtilen private key dosyasını okuyarak payload'ı mevcut anahtar ile imzalar.
+3. Lisans dosyası JSON formatında diske yazılır. Private key dosyasında herhangi bir değişiklik yapılmaz.
+
 ### Lisans Doğrulama
 
 1. Kullanıcının yüklediği lisans dosyası ve iki adet public key içeriği okunur.
@@ -51,6 +57,25 @@ Bu proje, RSA tabanlı imza ile lisans üretip doğrulayabilen Spring Boot taban
 
 - **Yanıt:** Oluşturulan lisans payload'ı, imza değeri ve yazılan dosya yolları.
 
+### Mevcut Private Key ile Lisans Oluşturma
+
+- **Endpoint:** `POST /api/licenses/sign`
+- **İçerik türü:** `application/json`
+- **Örnek İstek:**
+
+```json
+{
+  "customerName": "Test",
+  "issuedAt": "2024-05-25T10:00:00Z",
+  "expiresAt": "2025-05-25T10:00:00Z",
+  "hardwareId": "ABC-123",
+  "licensePath": "/tmp/license.json",
+  "privateKeyPath": "/tmp/private.pem"
+}
+```
+
+- **Yanıt:** Lisans payload'ı, imza değeri ve lisans dosyasının yolu. Private key yolu referans olarak döndürülür.
+
 ### Lisans Doğrulama
 
 - **Endpoint:** `POST /api/licenses/verify`
@@ -63,10 +88,11 @@ Bu proje, RSA tabanlı imza ile lisans üretip doğrulayabilen Spring Boot taban
 
 ## Web Arayüzü
 
-`http://localhost:8080` adresindeki arayüz iki bölümden oluşur:
+`http://localhost:8080` adresindeki arayüz üç bölümden oluşur:
 
 1. **Lisans Oluşturma Formu:** Sunucu üzerinde yazılacak dosya yollarını ve lisans parametrelerini alır. Yanıt JSON'ı ekranda gösterilir.
-2. **Doğrulama Formu:** Lisans ve iki public key dosyasını yükleyip hangi anahtarın lisansla eşleştiğini anında gösterir.
+2. **Mevcut Private Key ile Lisans Oluşturma:** Önceden üretilmiş bir private key yolu alınır ve yeni lisans aynı anahtar ile imzalanır.
+3. **Doğrulama Formu:** Lisans ve iki public key dosyasını yükleyip hangi anahtarın lisansla eşleştiğini anında gösterir.
 
 Arayüz tamamen istemci tarafında çalışır ve REST uç noktalarını `fetch` ile çağırır. Başarılı sonuçlar için detaylı JSON çıktı, hata durumlarında ise hata mesajı ekranda görüntülenir.
 
