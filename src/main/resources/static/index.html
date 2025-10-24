@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <title>Lisans Üretici</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        :root {
+            color-scheme: light dark;
+            font-family: "Segoe UI", Roboto, sans-serif;
+            background: #f5f5f5;
+            color: #222;
+        }
+
+        body {
+            margin: 0;
+            padding: 2rem;
+            display: flex;
+            flex-direction: column;
+            gap: 2rem;
+            background: inherit;
+        }
+
+        h1, h2 {
+            margin: 0 0 1rem 0;
+        }
+
+        main {
+            max-width: 960px;
+            margin: 0 auto;
+            width: 100%;
+        }
+
+        section {
+            background: rgba(255, 255, 255, 0.85);
+            border-radius: 12px;
+            padding: 1.5rem;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+        }
+
+        form {
+            display: grid;
+            gap: 1rem;
+        }
+
+        label {
+            display: grid;
+            gap: 0.35rem;
+            font-weight: 600;
+        }
+
+        input, button, textarea {
+            font: inherit;
+            padding: 0.6rem 0.75rem;
+            border-radius: 8px;
+            border: 1px solid #cbd5e1;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        input:focus, textarea:focus {
+            outline: none;
+            border-color: #2563eb;
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.25);
+        }
+
+        button {
+            background: #2563eb;
+            color: white;
+            font-weight: 600;
+            cursor: pointer;
+            border: none;
+            justify-self: start;
+        }
+
+        button:hover {
+            background: #1d4ed8;
+        }
+
+        .result {
+            background: #0f172a;
+            color: #f8fafc;
+            padding: 1rem;
+            border-radius: 8px;
+            overflow-x: auto;
+            font-family: "Fira Code", "Courier New", monospace;
+            font-size: 0.9rem;
+            line-height: 1.5;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        .status {
+            font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .status.ok {
+            color: #15803d;
+        }
+
+        .status.fail {
+            color: #b91c1c;
+        }
+
+        .hint {
+            font-size: 0.85rem;
+            color: #475569;
+        }
+
+        @media (max-width: 720px) {
+            body {
+                padding: 1rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <main>
+        <h1>Lisans Üretici ve Doğrulayıcı</h1>
+        <section>
+            <h2>Lisans Oluştur</h2>
+            <p class="hint">Sunucunun diskinde saklanacak dosya yollarını ve gerekli bilgileri girin.</p>
+            <form id="generate-form">
+                <label>
+                    Müşteri Adı
+                    <input type="text" name="customerName" required>
+                </label>
+                <label>
+                    Lisans Başlangıç Tarihi (opsiyonel)
+                    <input type="datetime-local" name="issuedAt">
+                </label>
+                <label>
+                    Lisans Bitiş Tarihi
+                    <input type="datetime-local" name="expiresAt" required>
+                </label>
+                <label>
+                    Donanım Kimliği (opsiyonel)
+                    <input type="text" name="hardwareId">
+                </label>
+                <label>
+                    Lisans Dosya Yolu
+                    <input type="text" name="licensePath" required placeholder="/tmp/license.json">
+                </label>
+                <label>
+                    Public Key Dosya Yolu
+                    <input type="text" name="publicKeyPath" required placeholder="/tmp/public.pem">
+                </label>
+                <label>
+                    Private Key Dosya Yolu
+                    <input type="text" name="privateKeyPath" required placeholder="/tmp/private.pem">
+                </label>
+                <label>
+                    RSA Key Uzunluğu (varsayılan 4096)
+                    <input type="number" name="keySize" min="1024" step="1024" placeholder="4096">
+                </label>
+                <button type="submit">Lisans Oluştur</button>
+            </form>
+            <pre id="generate-result" class="result" hidden></pre>
+        </section>
+
+        <section>
+            <h2>Lisans ve Public Key Doğrula</h2>
+            <p class="hint">Lisans dosyasını ve iki adet public key dosyasını seçerek hangisinin imza ile eşleştiğini kontrol edin.</p>
+            <form id="verify-form">
+                <label>
+                    Lisans Dosyası
+                    <input type="file" name="license" accept="application/json" required>
+                </label>
+                <label>
+                    Public Key #1
+                    <input type="file" name="primaryKey" accept=".pem" required>
+                </label>
+                <label>
+                    Public Key #2
+                    <input type="file" name="secondaryKey" accept=".pem" required>
+                </label>
+                <button type="submit">Doğrula</button>
+            </form>
+            <div id="verify-status" hidden>
+                <p class="status" id="primary-status"></p>
+                <p class="status" id="secondary-status"></p>
+                <pre id="verify-result" class="result"></pre>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        const generateForm = document.getElementById('generate-form');
+        const generateResult = document.getElementById('generate-result');
+        generateForm.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            const formData = new FormData(generateForm);
+
+            const payload = Object.fromEntries(formData.entries());
+            payload.keySize = payload.keySize ? Number(payload.keySize) : null;
+
+            const toIsoOrNull = (value) => value ? new Date(value).toISOString() : null;
+            payload.issuedAt = toIsoOrNull(payload.issuedAt);
+            payload.expiresAt = toIsoOrNull(payload.expiresAt);
+            payload.hardwareId = payload.hardwareId || null;
+
+            try {
+                const response = await fetch('/api/licenses', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const body = await response.json();
+                if (!response.ok) {
+                    throw new Error(body.detail || 'Lisans oluşturulurken hata oluştu');
+                }
+
+                generateResult.hidden = false;
+                generateResult.textContent = JSON.stringify(body, null, 2);
+            } catch (error) {
+                generateResult.hidden = false;
+                generateResult.textContent = `Hata: ${error.message}`;
+            }
+        });
+
+        const verifyForm = document.getElementById('verify-form');
+        const verifyStatus = document.getElementById('verify-status');
+        const primaryStatus = document.getElementById('primary-status');
+        const secondaryStatus = document.getElementById('secondary-status');
+        const verifyResult = document.getElementById('verify-result');
+
+        const buildStatusText = (matches) => matches ? '✔️ İmza doğrulandı' : '❌ İmza doğrulanamadı';
+        const statusClass = (matches) => matches ? 'status ok' : 'status fail';
+
+        verifyForm.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            const formData = new FormData();
+            const licenseFile = verifyForm.elements.namedItem('license').files[0];
+            const primaryFile = verifyForm.elements.namedItem('primaryKey').files[0];
+            const secondaryFile = verifyForm.elements.namedItem('secondaryKey').files[0];
+
+            formData.append('license', licenseFile);
+            formData.append('primaryKey', primaryFile);
+            formData.append('secondaryKey', secondaryFile);
+
+            try {
+                const response = await fetch('/api/licenses/verify', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const body = await response.json();
+                if (!response.ok) {
+                    throw new Error(body.detail || 'Doğrulama başarısız oldu');
+                }
+
+                verifyStatus.hidden = false;
+                primaryStatus.textContent = `Public Key #1: ${buildStatusText(body.primaryKeyMatches)}`;
+                secondaryStatus.textContent = `Public Key #2: ${buildStatusText(body.secondaryKeyMatches)}`;
+                primaryStatus.className = statusClass(body.primaryKeyMatches);
+                secondaryStatus.className = statusClass(body.secondaryKeyMatches);
+                verifyResult.textContent = JSON.stringify(body, null, 2);
+            } catch (error) {
+                verifyStatus.hidden = false;
+                primaryStatus.textContent = `Hata: ${error.message}`;
+                secondaryStatus.textContent = '';
+                primaryStatus.className = 'status fail';
+                secondaryStatus.className = 'status';
+                verifyResult.textContent = '';
+            }
+        });
+    </script>
+</body>
+</html>
